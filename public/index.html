@@ -103,7 +103,7 @@ function renderQuestions(){
     questionList.forEach((item,idx)=>{
         html+=`
         <div class="question">
-            <div class="q-title">${item.content}</div>
+            <div class="q-title">第${idx+1}题：${item.content}</div>
             <div class="opt-item">
                 <input type="radio" name="q${idx}" value="0" data-qid="${item.id}" id="opt${idx}0">
                 <label for="opt${idx}0">${item.opt_a}</label>
@@ -124,6 +124,7 @@ function renderQuestions(){
     })
     document.getElementById("q-list").innerHTML = html;
 }
+
 
 //提交答案传给后端批改
 async function submitPaper(){
