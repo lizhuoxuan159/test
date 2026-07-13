@@ -1,29 +1,36 @@
-﻿export async function onRequestGet({ env }) {
+export async function onRequestGet({ request, env }) {
   try {
     const db = env.DB;
-    await db.prepare(`
-    CREATE TABLE IF NOT EXISTS question(
-        id INTEGER PRIMARY KEY,
-        type TEXT NOT NULL,
-        content TEXT NOT NULL,
-        opt_a TEXT NOT NULL,
-        opt_b TEXT NOT NULL,
-        opt_c TEXT NOT NULL,
-        opt_d TEXT NOT NULL,
-        answer INTEGER NOT NULL CHECK(answer BETWEEN 0 AND 3)
-    )
-    `).run();
+    const { searchParams } = new URL(request.url);
+    const start = parseInt(searchParams.get("start") || "1");
+    const batchSize = 50;
+    const end = start + batchSize - 1;
 
-    await db.prepare(`
-    CREATE TABLE IF NOT EXISTS stat (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        total_users INTEGER DEFAULT 0,
-        total_score INTEGER DEFAULT 0
-    )`).run();
-    await db.prepare(`INSERT OR IGNORE INTO stat(id,total_users,total_score) VALUES (1,0,0)`).run();
+    //仅第一次调用初始化数据表
+    if (start === 1) {
+      await db.prepare(`
+      CREATE TABLE IF NOT EXISTS question(
+          id INTEGER PRIMARY KEY,
+          type TEXT NOT NULL,
+          content TEXT NOT NULL,
+          opt_a TEXT NOT NULL,
+          opt_b TEXT NOT NULL,
+          opt_c TEXT NOT NULL,
+          opt_d TEXT NOT NULL,
+          answer INTEGER NOT NULL CHECK(answer BETWEEN 0 AND 3)
+      )
+      `).run();
 
-    await db.prepare(`DELETE FROM question`).run();
-    await db.prepare(`DELETE FROM sqlite_sequence WHERE name = 'question'`).run();
+      await db.prepare(`
+      CREATE TABLE IF NOT EXISTS stat (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          total_users INTEGER DEFAULT 0,
+          total_score INTEGER DEFAULT 0
+      )`).run();
+      await db.prepare(`INSERT OR IGNORE INTO stat(id,total_users,total_score) VALUES (1,0,0)`).run();
+      await db.prepare(`DELETE FROM question`).run();
+      await db.prepare(`DELETE FROM sqlite_sequence WHERE name = 'question'`).run();
+    }
 
     const typeConfig = [
       {
@@ -83,39 +90,22 @@
       }
     ];
 
-    //分批插入，每次循环50条，减轻D1压力，防止超时退出
-    const batchSize = 50;
-    for (let start = 1; start <= 500; start += batchSize) {
-      const statements = [];
-      for (let i = start; i < start + batchSize && i <= 500; i++) {
-        const idx = i % 5;
-        const config = typeConfig[idx];
-        const desc = config.descriptions[i % 5];
-        const content = `${i}.【${config.typeName}】${desc}`;
-        let ans;
-        if (i % 5 === 0) ans = 0;
-        else if (i % 5 === 1) ans = 0;
-        else if (i % 5 === 2) ans = 1;
-        else if (i % 5 === 3) ans = 0;
-        else ans = 1;
-        statements.push({
-          id: i,
-          type: config.typeName,
-          content: content,
-          opt_a: config.options[0],
-          opt_b: config.options[1],
-          opt_c: config.options[2],
-          opt_d: config.options[3],
-          answer: ans
-        });
-      }
-      //批量一次性执行，减少循环await次数，避免函数超时
-      for (const item of statements) {
-        await db.prepare(`INSERT INTO question(id, type, content, opt_a, opt_b, opt_c, opt_d, answer) VALUES (?,?,?,?,?,?,?,?)`)
-          .bind(item.id, item.type, item.content, item.opt_a, item.opt_b, item.opt_c, item.opt_d, item.answer).run();
-      }
+    //只生成当前批次题目
+    for (let i = start; i <= end && i <= 500; i++) {
+      const idx = i % 5;
+      const config = typeConfig[idx];
+      const desc = config.descriptions[i % 5];
+      const content = `${i}.【${config.typeName}】${desc}`;
+      let ans;
+      if (i % 5 === 0) ans = 0;
+      else if (i % 5 === 1) ans = 0;
+      else if (i % 5 === 2) ans = 1;
+      else if (i % 5 === 3) ans = 0;
+      else ans = 1;
+      await db.prepare(`INSERT INTO question(id, type, content, opt_a, opt_b, opt_c, opt_d, answer) VALUES (?,?,?,?,?,?,?,?)`)
+        .bind(i, config.typeName, content, config.options[0], config.options[1], config.options[2], config.options[3], ans).run();
     }
-    return Response.json({ success: true, msg: "全部500题插入完成" });
+    return Response.json({ success: true, range: `${start}-${end}` });
   } catch (err) {
     console.error(err);
     return Response.json({ success: false, error: err.message }, { status: 500 });
