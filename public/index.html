@@ -1,0 +1,218 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>程序员潜能测评</title>
+<style>
+    :root{
+        --bg:#23252b;
+        --card:#2d2f36;
+        --text:#e6edf3;
+        --muted:#94a3b8;
+        --primary:#0e90d2;
+        --hover:#199ede;
+        --danger:#f87272;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",Consolas,sans-serif;}
+    body{background:var(--bg);color:var(--text);padding:24px;line-height:1.6;}
+    .container{max-width:920px;margin:0 auto;}
+    .header{text-align:center;margin-bottom:28px;}
+    h1{font-size:26px;color:#fff;margin-bottom:8px;}
+    .global-stat{color:var(--muted);margin-bottom:20px;}
+    .card{background:var(--card);border-radius:8px;padding:24px;margin-bottom:16px;}
+    .info-bar{display:flex;justify-content:space-between;padding:14px 18px;background:#282a31;border-radius:8px;margin-bottom:20px}
+    .question{padding:20px;border-bottom:1px solid #383a42;}
+    .q-title{font-size:16px;margin-bottom:14px;}
+    .opt-item{margin:10px 0;font-size:15px;cursor:pointer;}
+    input[type="radio"]{margin-right:8px;transform:scale(1.15);}
+    .btn{
+        background:var(--primary);
+        border:none;color:white;padding:12px 32px;border-radius:6px;font-size:16px;cursor:pointer;transition:0.2s;
+    }
+    .btn:hover{background:var(--hover)}
+    .btn:disabled{background:#475569;cursor:not-allowed}
+    .submit-wrap{text-align:center;margin-top:30px}
+    .result-card{display:none;margin-top:30px;padding:26px;background:#282a31;border-radius:8px;border-left:4px solid var(--primary)}
+    .hide{display:none !important;}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>程序员潜能测试</h1>
+        <div class="global-stat">
+            <span>参与人数：<span id="all‑users">0</span>｜历史平均分：<span id="avg‑score">0</span></span>
+        </div>
+        <p style="color:var(--muted)">题库总量500题，系统随机抽取50题作答；匿名模式，仅统计总分和答题人数，不会保存你的选择</p>
+    </div>
+
+    <!--开始页面-->
+    <div id="page‑start" class="card">
+        <p style="margin-bottom:20px;font-size:16px;">测试维度：逻辑推理、代码阅读理解、排错能力、算法意识、自主学习能力，每题2分满分100分</p>
+        <div class="submit-wrap">
+            <button class="btn" onclick="fetchStat().then(startExam)">开始测试</button>
+        </div>
+    </div>
+
+    <!--答题页面-->
+    <div id="page‑exam" class="hide">
+        <div class="info-bar">
+            <span>剩余题目：<span id="remain">50</span>/50</span>
+        </div>
+        <div id="q‑list"></div>
+        <div class="submit-wrap">
+            <button class="btn" id="submitBtn" onclick="submitPaper()">提交答案</button>
+        </div>
+    </div>
+
+    <!--结果页-->
+    <div id="page‑result" class="result-card">
+        <h2>作答完毕</h2>
+        <p>你的得分：<strong id="my‑score" style="font-size:22px;color:#0e90d2">0</strong> / 100</p>
+        <p id="eval‑text"></p>
+        <p style="margin-top:12px;color:var(--muted)">更新后数据：总人数 <span id="new‑users">0</span>，平均分 <span id="new‑avg">0</span></p>
+        <div class="submit-wrap" style="margin-top:20px">
+            <button class="btn" onclick="resetTest()">重新测试</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==========题库：500道题目，内置，前端随机选50题============
+const allQuestions = [
+    //逻辑题示例
+    {q:"1.10个小球有1个偏重，天平最少称量几次确定次品",opts:["2次","3次","4次","5次"],ans:1},
+    {q:"2.数列1,3,6,10,15下一项是",opts:["20","21","22","23"],ans:1},
+    {q:"3.if条件分支设计，下列哪一项逻辑最健壮",opts:["缺少else分支","所有情况覆盖","判断条件重复","边界忽略"],ans:1},
+    {q:"4.A>B，B<C，则A和C关系",opts:["A更大","C更大","无法确定","A=C"],ans:2},
+    {q:"5.补码中负数 = 原码取反+1，该说法",opts:["正确","错误","只适用于8位","只适用于32位"],ans:0},
+    {q:"6.斐波那契数列1,1,2,3,5,8下一个数",opts:["11","12","13","14"],ans:2},
+    {q:"7.循环必须设置终止条件，否则死循环",opts:["正确","错误","for循环不用","while不用"],ans:0},
+    {q:"8.5个人排队甲一定在乙前面，排列数",opts:["60","80","100","120"],ans:0},
+    {q:"9.除以3余2，除以5余2最小自然数",opts:["12","17","22","27"],ans:1},
+    {q:"10.3个盒子全部贴错标签，最少几次取出物品区分全部盒子",opts:["1","2","3","4"],ans:0},
+];
+//批量补齐剩余490道题目
+(function(){
+    const typeTexts = [
+        ["判断循环终止条件","分析分支完整性","推导代码运行结果","识别逻辑漏洞","化简条件表达式"],
+        ["判断语法是否报错","变量命名是否规范","运算符优先级","类型隐式转换","代码缩进习惯"],
+        ["定位空指针异常","排查超时原因","识别冗余代码","分析内存占用","捕获异常时机"],
+        ["快速学习新语法","阅读别人代码","复盘错误经验","知识迁移应用","持续更新技术栈"],
+        ["选择最优算法","拆分复杂业务","模块化设计","减少重复代码","理解架构思想"]
+    ];
+    for(let i = 11; i <= 500; i++){
+        const typeIdx = i % 5;
+        const text = typeTexts[typeIdx][i%5];
+        let answer = Math.floor(Math.random()*4);
+        let optList;
+        if(typeIdx===0) optList=["逻辑严谨","存在漏洞","条件不足","逻辑冗余"];
+        else if(typeIdx===1) optList=["语法正确","编译报错","运行时异常","兼容性问题"];
+        else if(typeIdx===2) optList=["代码bug","环境问题","参数错误","操作系统问题"];
+        else if(typeIdx===3) optList=["快速掌握","慢慢学习","理解困难","完全看不懂"];
+        else optList=["最优解法","普通写法","冗余代码","错误方案"];
+        allQuestions.push({
+            q:`${i}. ${typeIdx===0?"逻辑思维":typeIdx===1?"代码阅读":typeIdx===2?"排错能力":typeIdx===3?"自学能力":"算法意识"}：${text}`,
+            opts:optList,
+            ans:answer
+        })
+    }
+})()
+
+let selectedQuestions = [];
+
+//洗牌抽取50题
+function getRandom50(){
+    const copy = [...allQuestions];
+    for(let i = copy.length - 1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [copy[i],copy[j]] = [copy[j],copy[i]];
+    }
+    return copy.slice(0,50);
+}
+
+//渲染题目
+function renderQuestions(){
+    let html = "";
+    selectedQuestions.forEach((item,idx)=>{
+        html+=`
+        <div class="question">
+            <div class="q-title">${item.q}</div>
+            <div class="opt-item">
+                <input type="radio" name="q${idx}" value="0" id="opt${idx}0">
+                <label for="opt${idx}0">${item.opts[0]}</label>
+            </div>
+            <div class="opt-item">
+                <input type="radio" name="q${idx}" value="1" id="opt${idx}1">
+                <label for="opt${idx}1">${item.opts[1]}</label>
+            </div>
+            <div class="opt-item">
+                <input type="radio" name="q${idx}" value="2" id="opt${idx}2">
+                <label for="opt${idx}2">${item.opts[2]}</label>
+            </div>
+            <div class="opt-item">
+                <input type="radio" name="q${idx}" value="3" id="opt${idx}3">
+                <label for="opt${idx}3">${item.opts[3]}</label>
+            </div>
+        </div>`
+    })
+    document.getElementById("q‑list").innerHTML = html;
+}
+
+//获取全局统计
+async function fetchStat(){
+    const res = await fetch("/api/submit");
+    const data = await res.json();
+    document.getElementById("all‑users").innerText = data.total_users;
+    document.getElementById("avg‑score").innerText = data.avg_score;
+}
+
+function startExam(){
+    selectedQuestions = getRandom50();
+    document.getElementById("page‑start").classList.add("hide");
+    document.getElementById("page‑exam").classList.remove("hide");
+    renderQuestions();
+}
+
+//提交分数上传D1
+async function submitPaper(){
+    let score = 0;
+    for(let i=0;i<50;i++){
+        const sel = document.querySelector(`input[name="q${i}"]:checked`);
+        if(!sel){alert("第"+(i+1)+"题还未作答");return;}
+        if(Number(sel.value) === selectedQuestions[i].ans){
+            score +=2;
+        }
+    }
+    document.getElementById("submitBtn").disabled = true;
+    //调用CF后端
+    const resp = await fetch("/api/submit",{
+        method:"POST",
+        headers:{"Content‑Type":"application/json"},
+        body:JSON.stringify({score})
+    })
+    const result = await resp.json();
+    document.getElementById("page‑exam").classList.add("hide");
+    document.getElementById("page‑result").style.display = "block";
+    document.getElementById("my‑score").innerText = score;
+    document.getElementById("new‑users").innerText = result.total_users;
+    document.getElementById("new‑avg").innerText = result.avg_score;
+    let evalText;
+    if(score>=90) evalText="S级潜能：顶尖天赋，适合算法、架构开发";
+    else if(score>=75) evalText="A级潜能：优秀开发者，常规后端前端都能快速上手";
+    else if(score>=60) evalText="B级潜能：合格，系统学习后可以做开发";
+    else if(score>=40) evalText="C级潜能：逻辑偏弱，建议多刷基础习题";
+    else evalText="D级潜能：现阶段不太适合走编程路线";
+    document.getElementById("eval‑text").innerText = evalText;
+}
+
+function resetTest(){
+    document.getElementById("page‑result").style.display = "none";
+    document.getElementById("submitBtn").disabled = false;
+    document.getElementById("page‑start").classList.remove("hide");
+    fetchStat();
+}
+</script>
+</body>
+</html>

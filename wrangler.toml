@@ -1,0 +1,9 @@
+name = "program-test"
+compatibility_date = "2026-07-13"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB"
+database_name = "test"
+database_id = "7c79530e-2657-4887-be89-b873abd00e0e"
+migrations_dir = "migrations"
