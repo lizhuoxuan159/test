@@ -97,13 +97,14 @@ function startExam(){
     renderQuestions();
 }
 
-//渲染题目
 function renderQuestions(){
     let html = "";
     questionList.forEach((item,idx)=>{
+        //正则清除题干前面的数字+小数点
+        const realContent = item.content.replace(/^\d+\./,"");
         html+=`
         <div class="question">
-            <div class="q-title">第${idx+1}题：${item.content}</div>
+            <div class="q-title">第${idx+1}题：${realContent}</div>
             <div class="opt-item">
                 <input type="radio" name="q${idx}" value="0" data-qid="${item.id}" id="opt${idx}0">
                 <label for="opt${idx}0">${item.opt_a}</label>
