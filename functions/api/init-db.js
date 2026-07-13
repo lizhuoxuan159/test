@@ -1,10 +1,9 @@
 ﻿export async function onRequestGet({ env }) {
   try {
     const db = env.DB;
-    // 1. 创建数据表
     await db.prepare(`
     CREATE TABLE IF NOT EXISTS question(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY,
         type TEXT NOT NULL,
         content TEXT NOT NULL,
         opt_a TEXT NOT NULL,
@@ -14,6 +13,7 @@
         answer INTEGER NOT NULL CHECK(answer BETWEEN 0 AND 3)
     )
     `).run();
+
     await db.prepare(`
     CREATE TABLE IF NOT EXISTS stat (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,83 +21,87 @@
         total_score INTEGER DEFAULT 0
     )`).run();
     await db.prepare(`INSERT OR IGNORE INTO stat(id,total_users,total_score) VALUES (1,0,0)`).run();
-    //清空旧题目，防止重复插入
-    await db.prepare(`DELETE FROM question`).run();
 
-    //生成500道题目
+    await db.prepare(`DELETE FROM question`).run();
+    await db.prepare(`DELETE FROM sqlite_sequence WHERE name = 'question'`).run();
+
+    // 5大维度替换成生活化问题
     const typeConfig = [
       {
-        typeName: "逻辑思维",
+        typeName: "逻辑思考",
         descriptions: [
-          "判断循环终止条件是否合理",
-          "分析if‑else分支覆盖完整性",
-          "推导代码执行输出结果",
-          "识别隐藏逻辑漏洞",
-          "化简复杂条件表达式"
+          "遇到难题时，你习惯逐层拆解问题",
+          "做选择前会把利弊逐条分析清楚",
+          "别人讲复杂事情，你能快速理清条理",
+          "发现一件事有矛盾之处会认真思考根源",
+          "面对多个任务时，会判断事情优先级"
         ],
-        options: ["逻辑严谨", "存在漏洞", "条件不足", "逻辑冗余"]
+        options: ["经常如此", "偶尔这样", "很少做到", "几乎不会"]
       },
       {
-        typeName: "代码阅读",
+        typeName: "阅读理解",
         descriptions: [
-          "判断代码语法是否会编译报错",
-          "判断变量命名是否符合规范",
-          "分析运算符优先级执行结果",
-          "理解JS隐式类型转换",
-          "判断缩进和代码块范围"
+          "长篇文字看完，可以准确抓住核心意思",
+          "别人随口说的话，你能读懂隐藏含义",
+          "看书或者短文之后可以记住关键细节",
+          "听别人长篇讲述不会轻易走神",
+          "复杂的规则你可以快速理解记住"
         ],
-        options: ["语法正确", "编译报错", "运行时异常", "兼容性问题"]
+        options: ["完全没问题", "勉强看懂", "容易遗漏重点", "理解十分吃力"]
       },
       {
-        typeName: "Bug排查",
+        typeName: "耐心排错",
         descriptions: [
-          "定位空指针异常产生原因",
-          "分析程序运行超时的根源",
-          "识别冗余无用代码片段",
-          "判断内存占用过高诱因",
-          "选择合适异常捕获时机"
+          "事情出错之后，你会冷静查找问题原因",
+          "反复做错一件事，依然愿意耐心复盘",
+          "发现计划漏洞，主动调整方案补救",
+          "遇到意外状况不会慌乱烦躁",
+          "一件事多次失败仍然愿意坚持尝试"
         ],
-        options: ["代码Bug", "环境配置问题", "参数传递错误", "操作系统问题"]
+        options: ["心态稳定从容", "容易烦躁放弃", "摆烂敷衍了事", "直接推卸责任"]
       },
       {
         typeName: "自学能力",
         descriptions: [
-          "快速理解陌生语法的速度",
-          "阅读别人编写代码的效率",
-          "做完错题复盘总结习惯",
-          "把旧知识迁移到新场景",
-          "主动跟进新技术栈的意愿"
+          "接触全新领域可以靠自己慢慢摸索学会",
+          "看到别人优秀，愿意主动学习对方长处",
+          "做完一件事情之后会总结经验教训",
+          "旧的经验可以灵活用在全新场景",
+          "空闲时间愿意主动提升自己"
         ],
-        options: ["快速掌握", "慢慢学习", "理解困难", "完全看不懂"]
+        options: ["主动学习型", "被逼才会学", "学一会儿就疲惫", "完全不想学习"]
       },
       {
-        typeName: "算法意识",
+        typeName: "规划意识",
         descriptions: [
-          "选出时间复杂度最优解法",
-          "将复杂业务拆分成小模块",
-          "编写低重复度的模块化代码",
-          "减少循环次数进行性能优化",
-          "理解分层架构设计思想"
+          "做长期事情，会提前做好分步计划",
+          "日常任务懂得拆分变小任务逐个完成",
+          "懂得取舍，优先做重要的事情",
+          "做事懂得考虑长远后果，不只看眼前",
+          "日常会安排自己的空闲时间"
         ],
-        options: ["最优解法", "普通写法", "冗余代码", "错误方案"]
+        options: ["做事很有规划", "想到什么做什么", "拖延严重", "完全随心所欲"]
       }
     ];
+
     const insertStmt = db.prepare(`
-        INSERT INTO question(type,content,opt_a,opt_b,opt_c,opt_d,answer) VALUES (?,?,?,?,?,?,?)
+        INSERT INTO question(id, type, content, opt_a, opt_b, opt_c, opt_d, answer)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    //循环插入500条题目
     for (let i = 1; i <= 500; i++) {
       const idx = i % 5;
       const config = typeConfig[idx];
       const desc = config.descriptions[i % 5];
       const content = `${i}.【${config.typeName}】${desc}`;
+      //答案设置：选A得2分，选B得1分，选C0分，D0分，后端批改统计总分
       let ans;
       if (i % 5 === 0) ans = 0;
-      else if (i % 5 === 1) ans = 1;
-      else if (i % 5 === 2) ans = 0;
-      else if (i % 5 === 3) ans = 2;
+      else if (i % 5 === 1) ans = 0;
+      else if (i % 5 === 2) ans = 1;
+      else if (i % 5 === 3) ans = 0;
       else ans = 1;
       await insertStmt.bind(
+        i,
         config.typeName,
         content,
         config.options[0],
@@ -107,9 +111,8 @@
         ans
       ).run();
     }
-    return Response.json({ success: true, message: "数据表创建完成，500题目导入完毕" });
+    return Response.json({ success: true, message: "生活化心理题目初始化完成" });
   } catch (err) {
-    console.error(err);
     return Response.json({ success: false, error: err.message }, { status: 500 });
   }
 }
