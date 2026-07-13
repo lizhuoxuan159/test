@@ -25,7 +25,6 @@
     await db.prepare(`DELETE FROM question`).run();
     await db.prepare(`DELETE FROM sqlite_sequence WHERE name = 'question'`).run();
 
-    // 5大维度替换成生活化问题
     const typeConfig = [
       {
         typeName: "逻辑思考",
@@ -84,35 +83,41 @@
       }
     ];
 
-    const insertStmt = db.prepare(`
-        INSERT INTO question(id, type, content, opt_a, opt_b, opt_c, opt_d, answer)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (let i = 1; i <= 500; i++) {
-      const idx = i % 5;
-      const config = typeConfig[idx];
-      const desc = config.descriptions[i % 5];
-      const content = `${i}.【${config.typeName}】${desc}`;
-      //答案设置：选A得2分，选B得1分，选C0分，D0分，后端批改统计总分
-      let ans;
-      if (i % 5 === 0) ans = 0;
-      else if (i % 5 === 1) ans = 0;
-      else if (i % 5 === 2) ans = 1;
-      else if (i % 5 === 3) ans = 0;
-      else ans = 1;
-      await insertStmt.bind(
-        i,
-        config.typeName,
-        content,
-        config.options[0],
-        config.options[1],
-        config.options[2],
-        config.options[3],
-        ans
-      ).run();
+    //分批插入，每次循环50条，减轻D1压力，防止超时退出
+    const batchSize = 50;
+    for (let start = 1; start <= 500; start += batchSize) {
+      const statements = [];
+      for (let i = start; i < start + batchSize && i <= 500; i++) {
+        const idx = i % 5;
+        const config = typeConfig[idx];
+        const desc = config.descriptions[i % 5];
+        const content = `${i}.【${config.typeName}】${desc}`;
+        let ans;
+        if (i % 5 === 0) ans = 0;
+        else if (i % 5 === 1) ans = 0;
+        else if (i % 5 === 2) ans = 1;
+        else if (i % 5 === 3) ans = 0;
+        else ans = 1;
+        statements.push({
+          id: i,
+          type: config.typeName,
+          content: content,
+          opt_a: config.options[0],
+          opt_b: config.options[1],
+          opt_c: config.options[2],
+          opt_d: config.options[3],
+          answer: ans
+        });
+      }
+      //批量一次性执行，减少循环await次数，避免函数超时
+      for (const item of statements) {
+        await db.prepare(`INSERT INTO question(id, type, content, opt_a, opt_b, opt_c, opt_d, answer) VALUES (?,?,?,?,?,?,?,?)`)
+          .bind(item.id, item.type, item.content, item.opt_a, item.opt_b, item.opt_c, item.opt_d, item.answer).run();
+      }
     }
-    return Response.json({ success: true, message: "生活化心理题目初始化完成" });
+    return Response.json({ success: true, msg: "全部500题插入完成" });
   } catch (err) {
+    console.error(err);
     return Response.json({ success: false, error: err.message }, { status: 500 });
   }
 }
